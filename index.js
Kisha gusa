@@ -1,0 +1,51 @@
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const qrcode = require('qrcode-terminal');
+
+async function start() {
+  const { state, saveCreds } = await useMultiFileAuthState('session');
+  const sock = makeWASocket({
+    logger: pino({ level: 'silent' }),
+    auth: state,
+    printQRInTerminal: true,
+    browser: ['FALCON-BOT', 'Chrome', '1.0']
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) {
+      console.log('SCAN HII QR KWA WHATSAPP YAKO:');
+      qrcode.generate(qr, { small: true });
+    }
+    if (connection === 'close') {
+      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('Imekatika, inajaribu tena...');
+      if (shouldReconnect) start();
+    } else if (connection === 'open') {
+      console.log('FALCON-BOT IMEWAKA! 🦅🔥');
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+    const from = msg.key.remoteJid;
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+
+    if (text === '.menu' || text === '.falcon' || text === '.help') {
+      await sock.sendMessage(from, { text: `🦅 *FALCON-BOT MENU* 🦅\n\n1. .menu - Kuona menu\n2. .ping - Kuangalia kama bot iko hai\n3. .owner - Kumjua mmiliki\n4. .alive - Falcon iko hai?\n\n_Powered by FALCON 🦅_` });
+    }
+    if (text === '.ping') {
+      await sock.sendMessage(from, { text: 'Pong! ⚡ FALCON iko kasi sana!' });
+    }
+    if (text === '.alive') {
+      await sock.sendMessage(from, { text: '🦅 FALCON-BOT NIKO HAI! Niko tayari kukutumikia.' });
+    }
+    if (text === '.owner') {
+      await sock.sendMessage(from, { text: 'Mmiliki wa FALCON ni Shadrack Longwa 👑' });
+    }
+  });
+}
+start();
